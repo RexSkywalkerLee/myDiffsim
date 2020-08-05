@@ -61,6 +61,7 @@ std::ostream &operator<< (std::ostream &out, const Face *face);
 
 // Math utilities
 
+extern const Tensor infinity;
 
 
 
