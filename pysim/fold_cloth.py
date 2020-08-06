@@ -89,7 +89,7 @@ def reset_sim(sim, epoch, goal):
 def get_loss(ans, goal):
     #[0.0000, 0.0000, 0.0000, 0.7500, 0.6954, 0.3159
     diff = ans - goal
-   #diff[:,2] *= 0.01
+    diff[:,2] *= 10
     loss = torch.norm(diff)
     
     #print(ans)
