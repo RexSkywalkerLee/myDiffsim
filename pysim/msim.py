@@ -2,7 +2,8 @@ import torch
 import arcsim
 
 with torch.autograd.profiler.profile() as prof:
-         arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/cloth.json','out'])
+        #arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/fold_cloth/fold_cloth.json','out'])
+        #arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/fold_cloth/fold_cloth_reference.json','out'])
 	
     
         #arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/ground.json','out'])
@@ -16,7 +17,7 @@ with torch.autograd.profiler.profile() as prof:
 	#arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/multibody/multibody_make.json','out'])
 	# arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/multi/multi.json','out'])
 
-	# arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/drag/drag.json','out'])
+	# arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/drag/drag_cloth.json','out'])
 	# arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/drag/gravity_cloth.json','out'])
         
         # arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/manipulation/manipulation_vid.json','out'])
@@ -28,6 +29,7 @@ with torch.autograd.profiler.profile() as prof:
 	
 	#arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/circular_domino/circular_domino_make.json','out'])
         #arcsim.msim(3,['arcsim','replay','default_out/out19'])
+         arcsim.msim(3,['arcsim','replay','fold_cloth_out/out10'])
 	#arcsim.msim(3,['arcsim','replay','test/out1'])
 	#arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/circular_domino/debug.json','out'])
 	#arcsim.msim(4,['arcsim','simulate','conf/gravity.json','out'])

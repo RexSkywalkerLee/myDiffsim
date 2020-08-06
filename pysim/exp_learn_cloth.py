@@ -15,7 +15,7 @@ handles = [25, 60, 30, 54]
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'default_out'
+	out_path = 'learn_cloth'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -121,7 +121,7 @@ def run_sim(steps, sim, net, goal):
 
 	cnt = 0
 	ans1 = torch.tensor([0, 0, 0],dtype=torch.float64)
-	for node in sim.cloths[0].mesh.nodes:
+	for key, node in enumerate(sim.cloths[0].mesh.nodes):
 		cnt += 1
 		ans1 = ans1 + node.x
 	ans1 /= cnt
