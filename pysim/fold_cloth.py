@@ -29,18 +29,20 @@ torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
 
 class Net(nn.Module):
-	def __init__(self, n_input, n_output):
-		super(Net, self).__init__()
-		self.fc1 = nn.Linear(n_input, 50).double()
-		self.fc2 = nn.Linear(50, 200).double()
-		self.fc3 = nn.Linear(200, n_output).double()
-	def forward(self, x):
-		x = F.relu(self.fc1(x))
-		x = F.relu(self.fc2(x))
-		x = self.fc3(x)
-		# x = torch.clamp(x, min=-5, max=5)
-		return x
-
+    def __init__(self, n_input, n_output):
+        super(Net, self).__init__()
+        self.fc1 = nn.Linear(n_input, 500).double()
+        self.fc2 = nn.Linear(500, 200).double()
+        self.fc3 = nn.Linear(200, 50).double()
+        self.fc4 = nn.Linear(50, n_output).double()
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
+        # x = torch.clamp(x, min=-5, max=5)
+        return x
+        
 with open('conf/rigidcloth/fold_cloth/fold_cloth.json','r') as f:
 	config = json.load(f)
 # matfile = config['cloths'][0]['materials'][0]['data']
@@ -112,9 +114,9 @@ def run_sim(steps, sim, net, goal):
         remain_time = torch.tensor([(steps - step)/steps],dtype=torch.float64)
         		
         net_input = []
-        for i in range(len(handles)):
-            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
-            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
+        for node in sim.cloths[0].mesh.nodes:
+            net_input.append(node.x)
+            net_input.append(node.v)
 
         # dis = sim.obstacles[0].curr_state_mesh.dummy_node.x - goal
         # net_input.append(dis.narrow(0, 3, 3))
@@ -187,13 +189,13 @@ def do_train(cur_step,optimizer,sim,net):
         if epoch % 5 == 0:
             torch.save(net.state_dict(), torch_model_path)
         
-        if loss<1e-2:
+        if loss<1e-3:
             break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
         
         optimizer.step()
         		
-        if epoch>=400:
+        if epoch>=1000:
             quit()
         		
         epoch = epoch + 1
@@ -205,7 +207,7 @@ with open(out_path+('/log%s.txt'%timestamp),'w',buffering=1) as f:
 	# reset_sim(sim)
 
 	#param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
-	net = Net(13, 6)
+	net = Net(487, 6)
 	if os.path.exists(torch_model_path):
 		net.load_state_dict(torch.load(torch_model_path))
 		print("load: %s\n success" % torch_model_path)
