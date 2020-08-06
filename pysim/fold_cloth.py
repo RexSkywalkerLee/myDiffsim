@@ -87,16 +87,17 @@ def reset_sim(sim, epoch, goal):
 
 # 	return loss
 def get_loss(ans, goal):
-	#[0.0000, 0.0000, 0.0000, 0.7500, 0.6954, 0.3159
-	diff = ans - goal
-	loss = torch.norm(diff, p=2)
-
-       #print(ans)
-       #print(goal)
-       #print(loss)
-
-	return loss
-
+    #[0.0000, 0.0000, 0.0000, 0.7500, 0.6954, 0.3159
+    diff = ans - goal
+   #diff[:,2] *= 0.01
+    loss = torch.norm(diff)
+    
+    #print(ans)
+    #print(goal)
+    #print(loss)
+    
+    return loss
+    
 def run_sim(steps, sim, net, goal):
 
    #for obstacle in sim.obstacles:
@@ -186,13 +187,13 @@ def do_train(cur_step,optimizer,sim,net):
         if epoch % 5 == 0:
             torch.save(net.state_dict(), torch_model_path)
         
-        if loss<1e-3:
+        if loss<1e-1:
             break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
         
         optimizer.step()
         		
-        if epoch>=50:
+        if epoch>=400:
             quit()
         		
         epoch = epoch + 1
