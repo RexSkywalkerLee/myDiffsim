@@ -187,7 +187,7 @@ def do_train(cur_step,optimizer,sim,net):
         if epoch % 5 == 0:
             torch.save(net.state_dict(), torch_model_path)
         
-        if loss<1e-1:
+        if loss<1e-2:
             break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
         
