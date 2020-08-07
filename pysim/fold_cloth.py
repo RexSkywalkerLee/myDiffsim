@@ -163,7 +163,7 @@ def do_train(cur_step,optimizer,sim,net):
     global goal
     while True:
         #steps = int(1*15*spf)
-        steps = 50
+        steps = 30
         
         #sigma = 0.05
         #z = np.random.random()*sigma + 0.5
