@@ -26,6 +26,12 @@ timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+    torch.set_num_threads(8)
+device = torch.device(dev)
 
 
 class Net(nn.Module):
@@ -40,6 +46,7 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         x = self.fc4(x)
+        x = x.to(device)
         # x = torch.clamp(x, min=-5, max=5)
         return x
         
@@ -58,6 +65,7 @@ with open('meshes/rigidcloth/fold_cloth/fold_cloth.obj','r') as f:
             new_pos = torch.tensor(pos, dtype=torch.float64)
             goal.append(new_pos)
 goal = torch.stack(goal)
+goal = goal.to(device)
 
 def save_config(config, file):
 	with open(file,'w') as f:
@@ -66,7 +74,6 @@ def save_config(config, file):
 save_config(config, out_path+'/conf.json')
 
 
-torch.set_num_threads(8)
 spf = config['frame_steps']
 
 scalev=1
@@ -93,6 +100,7 @@ def get_loss(ans, goal):
     diff = ans - goal
     diff[:,2] *= 10
     loss = torch.norm(diff)
+    loss = loss.to(device)
     
     #print(ans)
     #print(goal)
@@ -128,6 +136,7 @@ def run_sim(steps, sim, net, goal):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
+            sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         
         arcsim.sim_step()
@@ -137,6 +146,7 @@ def run_sim(steps, sim, net, goal):
 
     ans = [ node.x for node in sim.cloths[0].mesh.nodes ]
     ans = torch.stack(ans)
+    ans = ans.to(device)
 
     #ans1 /= cnt
     #ans1 = torch.cat([torch.tensor([0, 0, 0],dtype=torch.float64), ans1])
