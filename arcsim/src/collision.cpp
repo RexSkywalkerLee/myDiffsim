@@ -47,7 +47,7 @@ using torch::Tensor;
 
 #ifndef FAST_MODE
 
-static const int max_iter = 100;
+static const int max_iter = 400;
 static const Tensor &thickness = ::magic.projection_thickness;
 static Tensor obs_mass;
 static vector<Tensor> xold;

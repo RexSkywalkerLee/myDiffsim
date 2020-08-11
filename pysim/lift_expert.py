@@ -93,10 +93,12 @@ def reset_sim(sim, epoch):
 # 	return loss
 def get_loss(xcoords, ycoords, height_diff):
 
+    epsilon = 1e-3
+
     x = xcoords - torch.mean(xcoords)
     y = ycoords - torch.mean(ycoords)
 
-    corr = torch.sum(x * y) / (torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2)))
+    corr = torch.sum(x * y) / ((torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2))) + epsilon)
 
     loss = -torch.abs(corr)
 
@@ -134,6 +136,7 @@ def run_sim(steps, sim, net):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
+            print(sim_input)
             sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         
@@ -189,8 +192,8 @@ def do_train(cur_step,optimizer,sim,net):
         #    break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
        
-        for param in net.parameters():
-            param.grad.data.clamp_(-0.1, 0.1)
+        #for param in net.parameters():
+        #    param.grad.data.clamp_(-0.1, 0.1)
         optimizer.step()
         		
         if epoch>=400:
