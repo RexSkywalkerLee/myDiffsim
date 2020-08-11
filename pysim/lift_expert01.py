@@ -31,7 +31,7 @@ timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
 if torch.cuda.is_available():
-    dev = "cuda:2"
+    dev = "cuda:1"
 else:
     dev = "cpu"
 
@@ -56,7 +56,7 @@ class Net(nn.Module):
         # x = torch.clamp(x, min=-5, max=5)
         return x
         
-with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
+with open('conf/rigidcloth/fold_cloth/fold_cloth.json','r') as f:
 	config = json.load(f)
 # matfile = config['cloths'][0]['materials'][0]['data']
 # with open(matfile,'r') as f:

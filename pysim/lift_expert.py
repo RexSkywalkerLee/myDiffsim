@@ -56,7 +56,7 @@ class Net(nn.Module):
         # x = torch.clamp(x, min=-5, max=5)
         return x
         
-with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
+with open('conf/rigidcloth/fold_cloth/fold_cloth.json','r') as f:
 	config = json.load(f)
 # matfile = config['cloths'][0]['materials'][0]['data']
 # with open(matfile,'r') as f:
@@ -136,7 +136,7 @@ def run_sim(steps, sim, net):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
-            print(sim_input)
+            torch.clamp(sim_input, -100, 100)
             sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         
