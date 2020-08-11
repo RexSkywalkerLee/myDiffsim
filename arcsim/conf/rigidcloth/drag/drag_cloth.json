@@ -4,18 +4,6 @@
     "end_time": 4,
     "cloths": [
     {
-        "mesh": "meshes/rigidcloth/drag/cloth.obj",
-        "materials": [{"data": "materials/gray-interlock.json",
-                       "thicken": 2}],
-        "remeshing": {
-            "refine_angle": 0.3,
-            "refine_compression": 0.005,
-            "refine_velocity": 0.5,
-            "size": [10e-3, 100e-3],
-            "aspect_min": 0.2
-        }
-    },
-    {
         "mesh": "meshes/rigidcloth/drag/big_flag.obj",
         "materials": [{"data": "materials/gray-interlock.json",
                        "thicken": 2}],
@@ -26,14 +14,6 @@
             "size": [10e-3, 100e-3],
             "aspect_min": 0.2
         }
-    }
-    ],
-    "obstacles": [
-    {
-        "mesh": "meshes/rigidcloth/drag/cube.obj",
-        "transform":{"scale":1,"translate":[0,0,0],"rotate":[0,0,1,0]},
-        "velocity": [0, 0, 0, 0, 0, -0.5],
-        "movable": 1
     }
     ],
     "disable":["remeshing","proximity"],
