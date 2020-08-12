@@ -56,12 +56,17 @@ class Net(nn.Module):
         # x = torch.clamp(x, min=-5, max=5)
         return x
         
-with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
+with open('conf/rigidcloth/fold_cloth/fold_cloth.json','r') as f:
 	config = json.load(f)
-# matfile = config['cloths'][0]['materials'][0]['data']
-# with open(matfile,'r') as f:
-# 	matconfig = json.load(f)
 
+goal = []
+with open('meshes/rigidcloth/fold_cloth/vertical_flag.obj','r') as f:
+    for line in f:
+        if 'v ' in line:
+            pos = [float(i) for i in line[2:].split()]
+            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+            goal.append(new_pos)
+goal = torch.stack(goal).to(device)
 
 def save_config(config, file):
 	with open(file,'w') as f:
@@ -83,36 +88,37 @@ def reset_sim(sim, epoch):
 		arcsim.init_physics(out_path+'/conf.json',out_path+'/out',False)
         #print(sim.obstacles[0].curr_state_mesh.dummy_node.x)
 
+#def get_loss(xcoords, ycoords, height_diff):
+#
+#    epsilon = 1e-3
+#
+#    x = xcoords - torch.mean(xcoords)
+#    y = ycoords - torch.mean(ycoords)
+#
+#    corr = torch.sum(x * y) / ((torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2))) + epsilon)
+#
+#    loss = -torch.abs(corr)
+#
+#    #print(loss)
+#    #print(height_diff)
+#    loss = loss + 10 * height_diff 
+#
+#    loss = loss.to(device)
+#    
+#    #print(ans)
+#    #print(goal)
+#    #print(loss)
+#    
+#    return loss
 
-
-# def get_loss(ans, goal):
-# 	#[0.0000, 0.0000, 0.0000, 0.7500, 0.6954, 0.3159
-# 	dif = ans - goal
-# 	loss = torch.norm(dif.narrow(0, 3, 3), p=2)
-
-# 	return loss
-def get_loss(xcoords, ycoords, height_diff):
-
-    x = xcoords - torch.mean(xcoords)
-    y = ycoords - torch.mean(ycoords)
-
-    corr = torch.sum(x * y) / (torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2)))
-
-    loss = -torch.abs(corr)
-
-    #print(loss)
-    #print(height_diff)
-    loss = loss + 100 * height_diff 
-
+def get_loss(ans, goal):
+    diff = ans - goal
+    loss = torch.norm(diff)
     loss = loss.to(device)
-    
-    #print(ans)
-    #print(goal)
-    #print(loss)
-    
+
     return loss
-    
-def run_sim(steps, sim, net):
+
+def run_sim(steps, sim, net, goal):
 
     for step in range(steps):
         print(step)
@@ -123,10 +129,7 @@ def run_sim(steps, sim, net):
             net_input.append(node.x.to(device))
             net_input.append(node.v.to(device))
 
-        # dis = sim.obstacles[0].curr_state_mesh.dummy_node.x - goal
-        # net_input.append(dis.narrow(0, 3, 3))
         net_input.append(remain_time)
-        #net_input = [t.to(device) for t in net_input]
         net_input = torch.cat(net_input).to(device)
         net_output = net(net_input)
         
@@ -134,29 +137,38 @@ def run_sim(steps, sim, net):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
+            sim_input = torch.clamp(sim_input, -100, 100)
             sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         
         arcsim.sim_step()
 
-    xcoords = [ node.x[0].to(device) for node in sim.cloths[0].mesh.nodes ]
-    ycoords = [ node.x[1].to(device) for node in sim.cloths[0].mesh.nodes ]
-    xcoords = torch.stack(xcoords)
-    ycoords = torch.stack(ycoords)
-    xcoords = xcoords.to(device)
-    ycoords = ycoords.to(device)
+   # xcoords = [ node.x[0].to(device) for node in sim.cloths[0].mesh.nodes ]
+   # ycoords = [ node.x[1].to(device) for node in sim.cloths[0].mesh.nodes ]
+   # xcoords = torch.stack(xcoords)
+   # ycoords = torch.stack(ycoords)
+   # xcoords = xcoords.to(device)
+   # ycoords = ycoords.to(device)
 
-    ans_handle0 = sim.cloths[0].mesh.nodes[handles[0]].x[2]
-    ans_handle1 = sim.cloths[0].mesh.nodes[handles[1]].x[2]
-    height_diff = torch.norm(ans_handle0 - ans_handle1) 
-    height_diff = height_diff.to(device)
+   # ans_handle0 = sim.cloths[0].mesh.nodes[handles[0]].x[2]
+   # ans_handle1 = sim.cloths[0].mesh.nodes[handles[1]].x[2]
+   # height_diff = torch.norm(ans_handle0 - ans_handle1) 
+   # height_diff = height_diff.to(device)
 
-    loss = get_loss(xcoords, ycoords, height_diff)
-        
+   # loss = get_loss(xcoords, ycoords, height_diff)
+    
+    ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
+    ans = torch.stack(ans)
+    ans = ans.to(device)
+
+    loss = get_loss(ans, goal)
+
+
     return loss
 
 def do_train(cur_step,optimizer,sim,net):
     epoch = 0
+    global goal
     while True:
         #steps = int(1*15*spf)
         steps = 20
@@ -164,7 +176,7 @@ def do_train(cur_step,optimizer,sim,net):
         reset_sim(sim, epoch)
         
         st = time.time()
-        loss = run_sim(steps, sim, net)
+        loss = run_sim(steps, sim, net, goal)
         en0 = time.time()
         		
         optimizer.zero_grad()
@@ -189,8 +201,8 @@ def do_train(cur_step,optimizer,sim,net):
         #    break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
        
-        for param in net.parameters():
-            param.grad.data.clamp_(-0.1, 0.1)
+        #for param in net.parameters():
+        #    param.grad.data.clamp_(-0.1, 0.1)
         optimizer.step()
         		
         if epoch>=400:
