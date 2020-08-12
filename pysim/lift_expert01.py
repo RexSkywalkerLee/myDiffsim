@@ -93,18 +93,18 @@ def reset_sim(sim, epoch):
 # 	return loss
 def get_loss(xcoords, ycoords, height_diff):
 
-    epsilon = 1e-3
+    epsilon = 1e-8
 
     x = xcoords - torch.mean(xcoords)
     y = ycoords - torch.mean(ycoords)
 
     corr = torch.sum(x * y) / (epsilon + (torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2))))
 
-    loss = -torch.abs(corr)
+    loss = 1-torch.abs(corr)
 
     #print(loss)
     #print(height_diff)
-    loss = loss + 100 * height_diff 
+    loss = loss + 1. * height_diff 
 
     loss = loss.to(device)
     
@@ -136,7 +136,7 @@ def run_sim(steps, sim, net):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
-            print(sim_input)
+            sim_input = torch.clamp(sim_input, -100, 100)
             sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         

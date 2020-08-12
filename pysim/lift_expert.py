@@ -104,7 +104,7 @@ def get_loss(xcoords, ycoords, height_diff):
 
     #print(loss)
     #print(height_diff)
-    loss = loss + 100 * height_diff 
+    loss = loss + 10 * height_diff 
 
     loss = loss.to(device)
     
@@ -136,7 +136,8 @@ def run_sim(steps, sim, net):
         		
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
-            torch.clamp(sim_input, -100, 100)
+            sim_input = torch.clamp(sim_input, -100, 100)
+            print(sim_input)
             sim_input = sim_input.to(torch.device('cpu'))
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input 
         
