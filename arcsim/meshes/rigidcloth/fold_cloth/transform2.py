@@ -32,7 +32,7 @@ for line in read_file:
         line = line.split()
         write_file.write('v ')
         write_file.write(line[1])
-        write_file.write(' -0.122805')
+        write_file.write(' 0.002195')
         write_file.write(' '+str(0.003776+0.005)+'\n')
     elif cnt in group3:
         line = line.split()
