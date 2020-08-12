@@ -2,7 +2,7 @@ import torch
 import arcsim
 
 with torch.autograd.profiler.profile() as prof:
-         arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/fold_cloth/flag.json','out'])
+         arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/fold_cloth/folded_flag.json','out'])
     
         #arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/ground.json','out'])
 	#arcsim.msim(4,['arcsim','simulate','conf/rigidcloth/multibody/multibody_make.json','out'])
