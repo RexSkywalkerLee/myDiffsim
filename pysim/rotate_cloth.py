@@ -8,20 +8,23 @@ import json
 import sys
 import gc
 import numpy as np
+import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 
-writer = SummaryWriter('rotate_out/exp2')
+writer = SummaryWriter('rotate_out/exp3')
 
 handles = [10, 51, 41, 57]
 ref_points = [25, 60, 30, 54]
 center = 62
 
+losses = []
+
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp2/'
+	out_path = 'rotate_out/exp3/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -102,6 +105,14 @@ def reset_sim(sim, epoch):
 #    
 #    return loss
 
+def visualize_loss(losses,dir_name):
+    plt.plot(losses)
+    plt.title('losses')
+    plt.xlabel('epochs')
+    plt.ylabel('losses')
+    plt.savefig(dir_name+'/'+'loss'+'.jpg')
+
+
 def get_loss(ans):
 
     loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
@@ -150,11 +161,11 @@ def run_sim(steps, sim, net):
 
     return cum_loss.to(device)
 
-def do_train(optimizer,sim,net):
-    epoch = 0
+def do_train(optimizer,scheduler,sim,net):
+    epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 30 
+        steps = 50
         
         reset_sim(sim, epoch)
         
@@ -173,6 +184,8 @@ def do_train(optimizer,sim,net):
        #print('epoch {}: loss={}\n  ans = {}\n goal = {}\n'.format(epoch, loss.data, ans.data, goal.data))
         print('epoch {}: loss={}\n'.format(epoch, loss.data))
         
+        losses.append(loss.data)
+
         print('forward time = {}'.format(en0-st))
         print('backward time = {}'.format(en1-en0))
         
@@ -187,18 +200,17 @@ def do_train(optimizer,sim,net):
         for param in net.parameters():
             param.grad.data.clamp_(-0.5, 0.5)
         optimizer.step()
-       #scheduler.step()
+        scheduler.step()
 
         print(optimizer.param_groups[0]['lr'])
         		
-        if epoch>=200:
-            quit()
+        if epoch >= 200:
+            break
+        
+        if epoch % 50 == 0:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
         
         epoch = epoch + 1
-
-       #if epoch % 50 == 0:
-           #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
-        # break
 
 
 with open(out_path+'/log.txt','w',buffering=1) as f:
@@ -215,11 +227,13 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     lr = 0.01
     momentum = 0.9
     f.write('lr={} momentum={}\n'.format(lr,momentum))
-   #optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum)
-   #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
-    optimizer = torch.optim.Adam(net.parameters(),lr=lr)
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
+   #optimizer = torch.optim.Adam(net.parameters(),lr=lr)
    #optimizer = torch.optim.Adadelta([density, stretch, bend])
-    do_train(optimizer,sim,net)
-    
+    do_train(optimizer,scheduler,sim,net)
+    losses = np.array(losses,dtype=np.float32)
+    np.save(out_path+'/'+'_loss',losses)
+    visualize_loss(losses,out_path)
 print("done")
 
