@@ -1,0 +1,22 @@
+{
+    "frame_time": 0.04,
+    "frame_steps": 1,
+    "end_time": 4,
+    "cloths": [
+    {
+        "mesh": "meshes/rigidcloth/paralldrag/init2.obj",
+        "materials": [{"data": "materials/aluminium.json",
+                       "thicken": 2}],
+        "remeshing": {
+            "refine_angle": 0.3,
+            "refine_compression": 0.005,
+            "refine_velocity": 0.5,
+            "size": [10e-3, 100e-3],
+            "aspect_min": 0.2
+        }
+    }
+    ],
+    "disable":["remeshing","proximity"],
+    "gravity":[0, 0, -2],
+    "magic": {"repulsion_thickness": 5e-3, "collision_stiffness": 1e6}
+}
