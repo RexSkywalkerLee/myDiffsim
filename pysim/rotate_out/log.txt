@@ -1,0 +1,4 @@
+lr=0.1 momentum=0.9
+epoch 0: loss=tensor([23.1148], dtype=torch.float64)
+epoch 1: loss=tensor([150.1562], dtype=torch.float64)
+epoch 2: loss=tensor([45.2866], dtype=torch.float64)
