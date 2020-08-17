@@ -104,7 +104,7 @@ def reset_sim(sim, epoch):
 
 def get_loss(ans):
 
-    loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64))
+    loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
     loss = loss + torch.norm(ans[:,-1]) 
     loss = loss.to(device)
 
@@ -131,7 +131,7 @@ def run_sim(steps, sim, net):
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
             sim_input = torch.clamp(sim_input, -1e5, 1e5)
-            sim_input = sim_input.to(device)
+            sim_input = sim_input.cpu()
             sim.cloths[0].mesh.nodes[handles[i]].v += sim_input
 
         arcsim.sim_step()
@@ -154,7 +154,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 0
     while True:
         #steps = int(1*15*spf)
-        steps = 30
+        steps = 30 
         
         reset_sim(sim, epoch)
         
@@ -184,16 +184,22 @@ def do_train(optimizer,scheduler,sim,net):
         #    break
         # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
        
-        #for param in net.parameters():
-        #    param.grad.data.clamp_(-0.1, 0.1)
+        for param in net.parameters():
+            param.grad.data.clamp_(-0.5, 0.5)
         optimizer.step()
         scheduler.step()
+
+        print(optimizer.param_groups[0]['lr'])
         		
         if epoch>=200:
             quit()
-        		
+        
         epoch = epoch + 1
+
+        if epoch % 50 == 0:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
         # break
+
 
 with open(out_path+'/log.txt','w',buffering=1) as f:
     sim=arcsim.get_sim()
@@ -206,11 +212,11 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
         net.load_state_dict(torch.load(torch_model_path))
         print("load: %s\n success" % torch_model_path)
     
-    lr = 0.1
+    lr = 0.01
     momentum = 0.9
     f.write('lr={} momentum={}\n'.format(lr,momentum))
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20, eta_min=0, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
    #optimizer = torch.optim.Adam(net.parameters(),lr=lr)
     # optimizer = torch.optim.Adadelta([density, stretch, bend])
     do_train(optimizer,scheduler,sim,net)
