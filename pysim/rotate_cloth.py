@@ -64,9 +64,9 @@ class Net(nn.Module):
         # x = torch.clamp(x, min=-5, max=5)
         return x
 
-class CNNNet(nn.Module):
+class CNNet(nn.Module):
         def __init__(self, n_output):
-                super(CNNNet,self).__init__()
+                super(CNNet,self).__init__()
                 self.cv1 = nn.Conv2d(6, 16, kernel_size=2, stride=1, padding=1).double()
                 self.cv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1).double()
                 self.maxpool = nn.MaxPool2d(2, 2)
@@ -213,7 +213,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 5
+        steps = 50
         
         reset_sim(sim, epoch)
         
@@ -267,7 +267,7 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     
    #param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
    #net = Net(48, 12)
-    net = CNNNet(12)
+    net = CNNet(12)
     net = net.to(device)
     if os.path.exists(torch_model_path):
         net.load_state_dict(torch.load(torch_model_path))
