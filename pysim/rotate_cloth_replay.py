@@ -86,12 +86,21 @@ def run_sim(steps, sim, net):
             net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
             net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
         net_output = net(torch.cat(net_input).to(device))
+        
+        if step<50:
+            r_handles = [10, 51, 41, 57]
+        elif steps<100:
+            r_handles = [57, 51, 10, 41]
+        elif steps<150:
+            r_handles = [41, 57, 51, 10]
+        else:
+            r_handles = [10, 41, 57, 51]
 
-        for i in range(len(handles)):
+        for i in range(len(r_handles)):
             sim_input = net_output[3*i:3*i+3]
             sim_input = torch.clamp(sim_input, -1e5, 1e5)
             sim_input = sim_input.cpu()
-            sim.cloths[0].mesh.nodes[handles[i]].v += sim_input
+            sim.cloths[0].mesh.nodes[r_handles[i]].v += sim_input
 
         arcsim.sim_step()
 
@@ -103,13 +112,13 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     net = Net(48, 12)
     net = net.to(device)
     if os.path.exists(torch_model_path):
-        net.load_state_dict(torch.load(torch_model_path))
+        net.load_state_dict(torch.load(torch_model_path, map_location=torch.device('cpu')))
         print("load: %s\n success" % torch_model_path)
     else:
         print("load fail!")
         quit()
 
     reset_sim(sim)
-    run_sim(50,sim,net)
+    run_sim(100,sim,net)
 print("done")
 
