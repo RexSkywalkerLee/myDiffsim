@@ -14,7 +14,6 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 
-writer = SummaryWriter('rotate_out/exp6')
 
 handles = [10, 51, 41, 57]
 ref_points = [25, 60, 30, 54]
@@ -28,19 +27,20 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp6/'
+	out_path = 'rotate_out/exp7/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
 	os.mkdir(out_path)
 
+writer = SummaryWriter(out_path)
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
 if torch.cuda.is_available():
-    dev = "cuda:1"
+    dev = "cuda:2"
 else:
     dev = "cpu"
 
@@ -92,6 +92,15 @@ class CNNet(nn.Module):
 with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
 	config = json.load(f)
 
+goal = []
+with open('meshes/rigidcloth/drag/rotated_big_flag.obj','r') as f:
+    for line in f:
+        if 'v ' in line:
+            pos = [float(i) for i in line[2:].split()]
+            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+            goal.append(new_pos)
+goal = torch.stack(goal).to(device)
+
 def save_config(config, file):
 	with open(file,'w') as f:
 		json.dump(config, f)
@@ -111,29 +120,6 @@ def reset_sim(sim, epoch):
 		arcsim.init_physics(out_path+'/conf.json',out_path+'/out',False)
         #print(sim.obstacles[0].curr_state_mesh.dummy_node.x)
 
-#def get_loss(xcoords, ycoords, height_diff):
-#
-#    epsilon = 1e-3
-#
-#    x = xcoords - torch.mean(xcoords)
-#    y = ycoords - torch.mean(ycoords)
-#
-#    corr = torch.sum(x * y) / ((torch.sqrt(torch.sum(x ** 2)) * torch.sqrt(torch.sum(y ** 2))) + epsilon)
-#
-#    loss = -torch.abs(corr)
-#
-#    #print(loss)
-#    #print(height_diff)
-#    loss = loss + 10 * height_diff 
-#
-#    loss = loss.to(device)
-#    
-#    #print(ans)
-#    #print(goal)
-#    #print(loss)
-#    
-#    return loss
-
 def visualize_loss(losses,dir_name):
     plt.plot(losses)
     plt.title('losses')
@@ -142,13 +128,21 @@ def visualize_loss(losses,dir_name):
     plt.savefig(dir_name+'/'+'loss'+'.jpg')
 
 
-def get_loss(ans):
+def get_rotational_loss(ans):
 
     loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
     loss = loss + torch.norm(ans[:,-1]) 
     loss = loss.to(device)
 
     return loss
+
+def get_reference_loss(ans, goal):
+    diff = ans - goal
+    loss = torch.norm(diff)
+    loss = loss.to(device)
+
+    return loss	
+	
 
 def run_sim(steps, sim, net):
 
@@ -157,35 +151,34 @@ def run_sim(steps, sim, net):
 
     for step in range(steps):
         print(step)
-       #remain_time = torch.tensor([(steps - step)/steps],dtype=torch.float64).to(device)
         		
-       # net_input = []
-       # for i in range(len(ref_points)):
-       #     net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
-       #     net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].v)
-       # for i in range(len(handles)):
-       #     net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
-       #     net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
-       # net_output = net(torch.cat(net_input).to(device))
+        net_input = []
+        for i in range(len(ref_points)):
+            net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
+            net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].v)
+        for i in range(len(handles)):
+            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
+            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
+        net_output = net(torch.cat(net_input).to(device))
         
-        net_outer = []
-        for i in range(9):
-            net_inner = []
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-            net_inner = torch.cat(net_inner, dim=2)
-            net_outer.append(net_inner)
-        net_outer = torch.cat(net_outer, dim=0)
-        net_outer = net_outer.to(device)
-       #print(net_outer.size())
-        
-        time = torch.tensor([step/steps], dtype=torch.float64).to(device)
+       # net_outer = []
+       # for i in range(9):
+       #     net_inner = []
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
+       #     net_inner = torch.cat(net_inner, dim=2)
+       #     net_outer.append(net_inner)
+       # net_outer = torch.cat(net_outer, dim=0)
+       # net_outer = net_outer.to(device)
+       ##print(net_outer.size())
+       # 
+       # time = torch.tensor([step/steps], dtype=torch.float64).to(device)
 
-        net_output = net(net_outer, time)
+       # net_output = net(net_outer, time)
 
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
@@ -195,17 +188,21 @@ def run_sim(steps, sim, net):
 
         arcsim.sim_step()
 
-        ans = [] 
-        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
-        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
-        ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
+       # ans = [] 
+       # ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
+       # ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
+       # ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
     
+       # ans = torch.stack(ans)
+       # ans = ans.to(device)
+
+        ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
         ans = torch.stack(ans)
         ans = ans.to(device)
 
-        loss = get_loss(ans)
+        loss = get_reference_loss(ans, goal)
 
-        cum_loss = cum_loss + loss
+        cum_loss = cum_loss + loss * (step / steps)
 
     return cum_loss.to(device)
 
@@ -266,8 +263,8 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     # reset_sim(sim)
     
    #param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
-   #net = Net(48, 12)
-    net = CNNet(12)
+    net = Net(48, 12)
+   #net = CNNet(12)
     net = net.to(device)
     if os.path.exists(torch_model_path):
         net.load_state_dict(torch.load(torch_model_path))
