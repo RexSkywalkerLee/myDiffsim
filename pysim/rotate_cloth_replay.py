@@ -29,7 +29,7 @@ if not os.path.exists(out_path):
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
-torch_model_path = out_path + ('/net_weight.pth2020-08-17_23:22:18')
+torch_model_path = out_path + ('/net_weight.pth2020-08-17_23:27:44')
 
 if torch.cuda.is_available():
     dev = "cuda:1"
@@ -70,7 +70,7 @@ spf = config['frame_steps']
 scalev=1
 
 def reset_sim(sim):
-    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay3',False)
+    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay4',False)
 
 def run_sim(steps, sim, net):
 
