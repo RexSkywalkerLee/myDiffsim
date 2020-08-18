@@ -21,7 +21,7 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp3/'
+	out_path = 'rotate_out/exp3'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -29,7 +29,7 @@ if not os.path.exists(out_path):
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
-torch_model_path = out_path + ('/net_weight.pth2020-08-17_23:19:53')
+torch_model_path = out_path + ('/net_weight.pth2020-08-17_23:22:18')
 
 if torch.cuda.is_available():
     dev = "cuda:1"
@@ -70,7 +70,7 @@ spf = config['frame_steps']
 scalev=1
 
 def reset_sim(sim):
-    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay',False)
+    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay3',False)
 
 def run_sim(steps, sim, net):
 
@@ -105,8 +105,11 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     if os.path.exists(torch_model_path):
         net.load_state_dict(torch.load(torch_model_path))
         print("load: %s\n success" % torch_model_path)
+    else:
+        print("load fail!")
+        quit()
 
-    reset_sim(sim,1)
+    reset_sim(sim)
     run_sim(50,sim,net)
 print("done")
 
