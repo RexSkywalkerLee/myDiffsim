@@ -14,7 +14,7 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 
-writer = SummaryWriter('rotate_out/exp3')
+writer = SummaryWriter('rotate_out/exp4')
 
 handles = [10, 51, 41, 57]
 ref_points = [25, 60, 30, 54]
@@ -24,7 +24,7 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp3/'
+	out_path = 'rotate_out/exp4/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -165,7 +165,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 50
+        steps = 40
         
         reset_sim(sim, epoch)
         
