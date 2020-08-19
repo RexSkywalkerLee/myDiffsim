@@ -94,14 +94,23 @@ class CNNet(nn.Module):
 with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
 	config = json.load(f)
 
-goal = []
+goal_90 = []
 with open('meshes/rigidcloth/drag/rotated_big_flag.obj','r') as f:
     for line in f:
         if 'v ' in line:
             pos = [float(i) for i in line[2:].split()]
             new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
-            goal.append(new_pos)
-goal = torch.stack(goal).to(device)
+            goal_90.append(new_pos)
+goal_90 = torch.stack(goal_90).to(device)
+
+goal_180 = []
+with open('meshes/rigidcloth/drag/rotated_big_flag_180deg.obj','r') as f:
+    for line in f:
+        if 'v ' in line:
+            pos = [float(i) for i in line[2:].split()]
+            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+            goal_180.append(new_pos)
+goal_180 = torch.stack(goal_180).to(device)
 
 def save_config(config, file):
 	with open(file,'w') as f:
@@ -166,9 +175,11 @@ def run_sim(steps, sim, net):
         if step<20:
             r_handles = [10, 51, 41, 57]
             r_ref_points = [25, 60, 30, 54]
+            r_goal = goal_90
         elif step>=20 and steps<40:
             r_handles = [51, 57, 10, 41]
             r_ref_points = [30, 25, 54, 60]
+            r_goal = goal_180
 
         net_input = []
         for i in range(len(r_ref_points)):
@@ -222,7 +233,7 @@ def run_sim(steps, sim, net):
             ans = torch.stack(ans)
             ans = ans.to(device)
 
-            loss = get_reference_loss(ans, goal)
+            loss = get_reference_loss(ans, r_goal)
 
             cum_loss = cum_loss + loss
 
