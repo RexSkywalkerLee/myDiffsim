@@ -27,7 +27,7 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp7/'
+	out_path = 'rotate_out/exp8/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -40,7 +40,7 @@ timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
 if torch.cuda.is_available():
-    dev = "cuda:2"
+    dev = "cuda:1"
 else:
     dev = "cpu"
 
@@ -153,8 +153,8 @@ def get_reference_loss(ans, goal):
 
 def run_sim(steps, sim, net):
 
-    cum_loss = torch.tensor([0.0], dtype=torch.float64)
-    cum_loss = cum_loss.to(device)
+    #cum_loss = torch.tensor([0.0], dtype=torch.float64)
+    #cum_loss = cum_loss.to(device)
 
     for step in range(steps):
         print(step)
@@ -196,31 +196,31 @@ def run_sim(steps, sim, net):
 
         arcsim.sim_step()
 
-        ans = [] 
-        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
-        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
-        ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
-    
-        ans = torch.stack(ans)
-        ans = ans.to(device)
+    #ans = [] 
+    #ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
+    #ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
+    #ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
+    #
+    #ans = torch.stack(ans)
+    #ans = ans.to(device)
 
-        loss = get_rotation_loss(ans)
+    #loss = get_rotation_loss(ans)
 
-       # ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
-       # ans = torch.stack(ans)
-       # ans = ans.to(device)
+    ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
+    ans = torch.stack(ans)
+    ans = ans.to(device)
 
-       # loss = get_reference_loss(ans, goal)
+    loss = get_reference_loss(ans, goal)
 
-        cum_loss = cum_loss + loss * (step / steps)
+       #cum_loss = cum_loss + loss * step
 
-    return cum_loss.to(device)
+    return loss.to(device)
 
 def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 30
+        steps = 20
         
         reset_sim(sim, epoch)
         
