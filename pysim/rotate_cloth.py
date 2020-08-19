@@ -128,10 +128,17 @@ def visualize_loss(losses,dir_name):
     plt.savefig(dir_name+'/'+'loss'+'.jpg')
 
 
-def get_rotational_loss(ans):
+def get_rotation_loss(ans):
 
     loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
-    loss = loss + torch.norm(ans[:,-1]) 
+    cnt = 0
+    for i in ref_points:
+        loss = loss + torch.norm(ans[cnt,:] - goal[i,:])
+        cnt += 1
+    for i in handles:
+        loss = loss + torch.norm(ans[cnt,:] - goal[i,:])
+        cnt += 1
+   # loss = loss + torch.norm(ans[:,-1]) 
     loss = loss.to(device)
 
     return loss
@@ -159,6 +166,7 @@ def run_sim(steps, sim, net):
         for i in range(len(handles)):
             net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
             net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
+        net_input.append(torch.tensor(step/steps, dtype=torch.float64).view(1))
         net_output = net(torch.cat(net_input).to(device))
         
        # net_outer = []
@@ -188,19 +196,21 @@ def run_sim(steps, sim, net):
 
         arcsim.sim_step()
 
-       # ans = [] 
-       # ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
-       # ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
-       # ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
+        ans = [] 
+        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
+        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
+        ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
     
-       # ans = torch.stack(ans)
-       # ans = ans.to(device)
-
-        ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
         ans = torch.stack(ans)
         ans = ans.to(device)
 
-        loss = get_reference_loss(ans, goal)
+        loss = get_rotation_loss(ans)
+
+       # ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
+       # ans = torch.stack(ans)
+       # ans = ans.to(device)
+
+       # loss = get_reference_loss(ans, goal)
 
         cum_loss = cum_loss + loss * (step / steps)
 
@@ -210,7 +220,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 50
+        steps = 30
         
         reset_sim(sim, epoch)
         
@@ -263,7 +273,7 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
     # reset_sim(sim)
     
    #param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
-    net = Net(48, 12)
+    net = Net(49, 12)
    #net = CNNet(12)
     net = net.to(device)
     if os.path.exists(torch_model_path):
