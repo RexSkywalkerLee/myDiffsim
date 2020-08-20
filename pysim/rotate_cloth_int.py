@@ -27,7 +27,7 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp10/'
+	out_path = 'rotate_out/exp11/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -38,7 +38,7 @@ writer = SummaryWriter(out_path)
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
-load_torch_model_path = 'rotate_out/exp9/net_weight.pth2020-08-20_02:32:09'
+load_torch_model_path = 'rotate_out/exp10/net_weight.pth2020-08-20_10:28:42'
 
 if torch.cuda.is_available():
     dev = "cuda:1"
@@ -111,23 +111,23 @@ with open('meshes/rigidcloth/drag/rotated_big_flag_180deg.obj','r') as f:
             goal_180.append(new_pos)
 goal_180 = torch.stack(goal_180).to(device)
 
-#goal_270 = []
-#with open('meshes/rigidcloth/drag/rotated_big_flag_270deg.obj','r') as f:
-#    for line in f:
-#        if 'v ' in line:
-#            pos = [float(i) for i in line[2:].split()]
-#            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
-#            goal_270.append(new_pos)
-#goal_270 = torch.stack(goal_270).to(device)
-#
-#goal_360 = []
-#with open('meshes/rigidcloth/drag/big_flag.obj','r') as f:
-#    for line in f:
-#        if 'v ' in line:
-#            pos = [float(i) for i in line[2:].split()]
-#            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
-#            goal_360.append(new_pos)
-#goal_360 = torch.stack(goal_360).to(device)
+goal_270 = []
+with open('meshes/rigidcloth/drag/rotated_big_flag_270deg.obj','r') as f:
+    for line in f:
+        if 'v ' in line:
+            pos = [float(i) for i in line[2:].split()]
+            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+            goal_270.append(new_pos)
+goal_270 = torch.stack(goal_270).to(device)
+
+goal_360 = []
+with open('meshes/rigidcloth/drag/big_flag.obj','r') as f:
+    for line in f:
+        if 'v ' in line:
+            pos = [float(i) for i in line[2:].split()]
+            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+            goal_360.append(new_pos)
+goal_360 = torch.stack(goal_360).to(device)
 
 def save_config(config, file):
 	with open(file,'w') as f:
@@ -197,14 +197,14 @@ def run_sim(steps, sim, net):
             r_handles = [51, 57, 10, 41]
             r_ref_points = [30, 25, 54, 60]
             r_goal = goal_180
-       # elif step>=40 and step<60:
-       #     r_handles = [57, 41, 51, 10]
-       #     r_ref_points = [54, 30, 60, 25]
-       #     r_goal = goal_270
-       # else:
-       #     r_handles = [41, 10, 57, 51]
-       #     r_ref_points = [60, 54, 25, 30]
-       #     r_goal = goal_360
+        elif step>=30 and step<45:
+            r_handles = [57, 41, 51, 10]
+            r_ref_points = [54, 30, 60, 25]
+            r_goal = goal_270
+        else:
+            r_handles = [41, 10, 57, 51]
+            r_ref_points = [60, 54, 25, 30]
+            r_goal = goal_360
 
         net_input = []
         for i in range(len(r_ref_points)):
@@ -268,7 +268,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 30
+        steps = 60
         
         reset_sim(sim, epoch)
         
