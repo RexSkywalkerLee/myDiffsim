@@ -27,7 +27,7 @@ losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp9/'
+	out_path = 'rotate_out/exp10/'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -38,8 +38,7 @@ writer = SummaryWriter(out_path)
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
-load_torch_model_path = 'rotate_out/exp8/net_weight.pth2020-08-19_22:58:21'
-
+load_torch_model_path = 'rotate_out/exp9/net_weight.pth2020-08-20_02:32:09'
 
 if torch.cuda.is_available():
     dev = "cuda:1"
@@ -187,14 +186,14 @@ def run_sim(steps, sim, net):
     for step in range(steps):
         print(step)
         
-        r_steps = 20
-        r_step = step % 20
+        r_steps = 15
+        r_step = step % 15
 
-        if step<20:
+        if step<15:
             r_handles = [10, 51, 41, 57]
             r_ref_points = [25, 60, 30, 54]
             r_goal = goal_90
-        elif step>=20 and step<40:
+        elif step>=15 and step<30:
             r_handles = [51, 57, 10, 41]
             r_ref_points = [30, 25, 54, 60]
             r_goal = goal_180
@@ -254,7 +253,7 @@ def run_sim(steps, sim, net):
 
     #loss = get_rotation_loss(ans)
         
-        if step % 20 == 19:
+        if step % 15 == 14:
             ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
             ans = torch.stack(ans)
             ans = ans.to(device)
@@ -269,7 +268,7 @@ def do_train(optimizer,scheduler,sim,net):
     epoch = 1
     while True:
         #steps = int(1*15*spf)
-        steps = 40
+        steps = 30
         
         reset_sim(sim, epoch)
         
