@@ -112,6 +112,24 @@ with open('meshes/rigidcloth/drag/rotated_big_flag_180deg.obj','r') as f:
             goal_180.append(new_pos)
 goal_180 = torch.stack(goal_180).to(device)
 
+#goal_270 = []
+#with open('meshes/rigidcloth/drag/rotated_big_flag_270deg.obj','r') as f:
+#    for line in f:
+#        if 'v ' in line:
+#            pos = [float(i) for i in line[2:].split()]
+#            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+#            goal_270.append(new_pos)
+#goal_270 = torch.stack(goal_270).to(device)
+#
+#goal_360 = []
+#with open('meshes/rigidcloth/drag/big_flag.obj','r') as f:
+#    for line in f:
+#        if 'v ' in line:
+#            pos = [float(i) for i in line[2:].split()]
+#            new_pos = torch.tensor(pos, dtype=torch.float64).to(device)
+#            goal_360.append(new_pos)
+#goal_360 = torch.stack(goal_360).to(device)
+
 def save_config(config, file):
 	with open(file,'w') as f:
 		json.dump(config, f)
@@ -176,10 +194,18 @@ def run_sim(steps, sim, net):
             r_handles = [10, 51, 41, 57]
             r_ref_points = [25, 60, 30, 54]
             r_goal = goal_90
-        elif step>=20 and steps<40:
+        elif step>=20 and step<40:
             r_handles = [51, 57, 10, 41]
             r_ref_points = [30, 25, 54, 60]
             r_goal = goal_180
+       # elif step>=40 and step<60:
+       #     r_handles = [57, 41, 51, 10]
+       #     r_ref_points = [54, 30, 60, 25]
+       #     r_goal = goal_270
+       # else:
+       #     r_handles = [41, 10, 57, 51]
+       #     r_ref_points = [60, 54, 25, 30]
+       #     r_goal = goal_360
 
         net_input = []
         for i in range(len(r_ref_points)):
