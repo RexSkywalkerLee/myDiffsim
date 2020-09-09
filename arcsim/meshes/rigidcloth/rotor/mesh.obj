@@ -1,6 +1,6 @@
 # Blender v2.83.4 OBJ File: 'mesh.blend'
 # www.blender.org
-mtllib mesh.mtl
+mtllib big_flag.mtl
 o mesh
 v 0.000000 0.000000 0.000000
 v 0.000000 0.000000 -1.000000
