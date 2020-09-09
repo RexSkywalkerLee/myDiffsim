@@ -1,0 +1,10 @@
+{
+    "network":{
+    },
+    "training":{
+        "process":4
+    },
+    "experiment":{
+        "task": "cloth_rotate"
+    }
+}

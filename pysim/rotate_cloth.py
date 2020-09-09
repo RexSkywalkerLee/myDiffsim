@@ -1,19 +1,27 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions.normal import Normal
 import arcsim
 import gc
 import time
 import json
 import sys
 import gc
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+
+from mpi4py import MPI
+from mpi.mpi_pytorch import setup_pytorch_for_mpi, sync_params,mpi_avg_grads
+from mpi.mpi_tools import mpi_fork, mpi_avg ,num_procs,proc_id
+
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-
+rank = proc_id() # Defnine rank 0 as server and rest are  runner
+size = num_procs()
 
 handles = [10, 51, 41, 57]
 ref_points = [25, 60, 30, 54]
@@ -25,72 +33,57 @@ cloth = [25, 24, 3, 70, 7, 6, 58, 31, 30, 71, 26, 4, 5, 80, 8, 17, 19, 66, 55, 2
 
 losses = []
 
-print(sys.argv)
-if len(sys.argv)==1:
-	out_path = 'rotate_out/exp8/'
-else:
-	out_path = sys.argv[1]
-if not os.path.exists(out_path):
-	os.mkdir(out_path)
+try:
+    cuda = sys.argv[1].split(',')[(rank)%(len(sys.argv[1].split(',')))]
+    os.environ['CUDA_VISIBLE_DEVICES'] = cuda
+    print(cuda)
+    default_path = sys.argv[2]
+except:
+    print('Error in usage!')
 
-writer = SummaryWriter(out_path)
+print("cuda device:",cuda)
+
+steps = 20
+epochs = 100
+
+if os.path.exists(default_path+str(rank)):
+    pass
+else:
+    os.mkdir(default_path+str(rank))
+out_path = default_path+str(rank)
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("GPU is:",torch.cuda.is_available())
+
+writer = SummaryWriter(out_path+'/exp_loss')
+
+if rank == 0:
+    setup_pytorch_for_mpi()
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-
 torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 
-if torch.cuda.is_available():
-    dev = "cuda:1"
-else:
-    dev = "cpu"
-
-torch.set_num_threads(8)
-device = torch.device(dev)
 
 class Net(nn.Module):
     def __init__(self, n_input, n_output):
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(n_input, 128).double()
-        self.fc2 = nn.Linear(128, 256).double()
-        self.fc3 = nn.Linear(256, 512).double()
-        self.fc4 = nn.Linear(512, n_output).double()
+        log_std = -0.5 * np.ones(n_output, dtype=np.float64)
+        log_std = torch.nn.Parameter(torch.as_tensor(log_std))
+        self.std = torch.exp(log_std).double()
+        self.fc1 = nn.Linear(n_input, 64).double()
+        self.fc2 = nn.Linear(64, 64).double()
+        self.fc3 = nn.Linear(64, n_output).double()
         self.dropout = nn.Dropout(0.05)
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
         x = self.dropout(x)
-        x = self.fc4(x)
-        # x = torch.clamp(x, min=-5, max=5)
+        x = self.fc3(x)
+        a = Normal(x, self.std.to(device)).sample()
         return x
 
-class CNNet(nn.Module):
-        def __init__(self, n_output):
-                super(CNNet,self).__init__()
-                self.cv1 = nn.Conv2d(6, 16, kernel_size=2, stride=1, padding=1).double()
-                self.cv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1).double()
-                self.maxpool = nn.MaxPool2d(2, 2)
-                self.dropout = nn.Dropout(0.05)
-                self.fc1 = nn.Linear(5*5*32+1, 120).double()
-                self.fc2 = nn.Linear(120, 84).double()
-                self.fc3 = nn.Linear(84, n_output).double()
-
-        def forward(self,x,t):
-                x = torch.reshape(x,(1,6,9,9))
-                x = F.relu(self.cv1(x))
-                x = F.relu(self.cv2(x))
-                x = self.maxpool(x)
-                x = torch.flatten(x)
-                x = torch.cat([x,t])
-                x = F.relu(self.fc1(x))
-                x = self.dropout(x)
-                x = F.relu(self.fc2(x))
-                x = self.fc3(x)
-                x = x.to(device)
-                return  x
-
 with open('conf/rigidcloth/drag/drag_cloth.json','r') as f:
-	config = json.load(f)
+    config = json.load(f)
 
 goal = []
 with open('meshes/rigidcloth/drag/rotated_big_flag.obj','r') as f:
@@ -102,8 +95,8 @@ with open('meshes/rigidcloth/drag/rotated_big_flag.obj','r') as f:
 goal = torch.stack(goal).to(device)
 
 def save_config(config, file):
-	with open(file,'w') as f:
-		json.dump(config, f)
+    with open(file,'w') as f:
+        json.dump(config, f)
 
 save_config(config, out_path+'/conf.json')
 
@@ -111,25 +104,22 @@ spf = config['frame_steps']
 
 scalev=1
 
-def reset_sim(sim, epoch):
-	if epoch % 5==0:
-		arcsim.init_physics(out_path+'/conf.json', out_path+'/out%d'%epoch,False)
-	#text_name = out_path+'/out%d'%epoch + "/goal.txt"
-	#np.savetxt(text_name, goal, delimiter=',')
-	else:
-		arcsim.init_physics(out_path+'/conf.json',out_path+'/out',False)
-        #print(sim.obstacles[0].curr_state_mesh.dummy_node.x)
+def reset_sim(sim, epoch=0, rank=0):
+    if epoch % 5==0:
+        arcsim.init_physics(out_path+'/conf.json', out_path+'/rank'+str(rank)+'_out%d'%epoch,False)
+    else:
+        arcsim.init_physics(out_path+'/conf.json',out_path+'/rank'+str(rank)+'_out',False)
 
-def visualize_loss(losses,dir_name):
+def visualize_loss(losses, dir_name, rank):
     plt.plot(losses)
+    plt.plot(losses.argmin(),losses.min(),'ro')
+    plt.text(losses.argmin(),losses.min(), "Minimum :{0} at {1}".format(losses.argmin(),losses.min()))
     plt.title('losses')
     plt.xlabel('epochs')
     plt.ylabel('losses')
-    plt.savefig(dir_name+'/'+'loss'+'.jpg')
-
+    plt.savefig(dir_name+'/'+'loss'+str(rank)+'.jpg')
 
 def get_rotation_loss(ans):
-
     loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
     cnt = 0
     for i in ref_points:
@@ -140,25 +130,24 @@ def get_rotation_loss(ans):
         cnt += 1
    # loss = loss + torch.norm(ans[:,-1]) 
     loss = loss.to(device)
-
     return loss
+
 
 def get_reference_loss(ans, goal):
     diff = ans - goal
     loss = torch.norm(diff)
     loss = loss.to(device)
-
     return loss	
-	
+
 
 def run_sim(steps, sim, net):
 
-    #cum_loss = torch.tensor([0.0], dtype=torch.float64)
-    #cum_loss = cum_loss.to(device)
+    cum_loss = torch.tensor([0.0], dtype=torch.float64)
+    cum_loss = cum_loss.to(device)
 
     for step in range(steps):
-        print(step)
-        		
+        print(rank,':',step)
+        
         net_input = []
         for i in range(len(ref_points)):
             net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
@@ -168,25 +157,6 @@ def run_sim(steps, sim, net):
             net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
         net_input.append(torch.tensor(step/steps, dtype=torch.float64).view(1))
         net_output = net(torch.cat(net_input).to(device))
-        
-       # net_outer = []
-       # for i in range(9):
-       #     net_inner = []
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].x[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[0].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[1].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner.append(torch.cat([ sim.cloths[0].mesh.nodes[i].v[2].view(1,1,1) for i in cloth[9*i:9*i+9] ], dim=1))
-       #     net_inner = torch.cat(net_inner, dim=2)
-       #     net_outer.append(net_inner)
-       # net_outer = torch.cat(net_outer, dim=0)
-       # net_outer = net_outer.to(device)
-       ##print(net_outer.size())
-       # 
-       # time = torch.tensor([step/steps], dtype=torch.float64).to(device)
-
-       # net_output = net(net_outer, time)
 
         for i in range(len(handles)):
             sim_input = net_output[3*i:3*i+3]
@@ -196,100 +166,125 @@ def run_sim(steps, sim, net):
 
         arcsim.sim_step()
 
-    #ans = [] 
-    #ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
-    #ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
-    #ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
-    #
-    #ans = torch.stack(ans)
-    #ans = ans.to(device)
+        ans = [] 
+        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in ref_points ])
+        ans.extend([ sim.cloths[0].mesh.nodes[i].x.to(device) for i in handles ])
+        ans.append(sim.cloths[0].mesh.nodes[center].x.to(device))
+    
+        ans = torch.stack(ans)
+        ans = ans.to(device)
 
-    #loss = get_rotation_loss(ans)
+        loss = get_rotation_loss(ans)
+        cum_loss = cum_loss + loss
+        
+#     ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
+#     ans = torch.stack(ans)
+#     ans = ans.to(device)
 
-    ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
-    ans = torch.stack(ans)
-    ans = ans.to(device)
+#     loss = get_reference_loss(ans, goal)
 
-    loss = get_reference_loss(ans, goal)
+    return cum_loss.to(device)
 
-       #cum_loss = cum_loss + loss * step
-
-    return loss.to(device)
-
-def do_train(optimizer,scheduler,sim,net):
-    epoch = 1
+def server_task(optimizer,scheduler,net,sim): # This is a loop
+    epoch = 0
+    global steps, epochs
     while True:
-        #steps = int(1*15*spf)
-        steps = 20
-        
-        reset_sim(sim, epoch)
-        
         st = time.time()
-        loss = run_sim(steps, sim, net)
-        en0 = time.time()
-        		
         optimizer.zero_grad()
-        
+        # ==== Synchronize Parameters ====
+        sync_params(net)
+        # ================================
+
+        # ==== Run the training on server ====
+        net = net.to(device)
+        #print(next(net.parameters()).grad)
+        reset_sim(sim,epoch,rank)
+        loss = run_sim(steps,sim,net)
         loss.backward()
-        writer.add_scalar('training loss', loss, epoch)
+        net = net.cpu()
+        # ====================================
+
+        # ==== Get Gradient From Runner ====
+        mpi_avg_grads(net)
+        # ==================================
+        
+        # ==== Average the loss ====
+        loss = float(mpi_avg(float(loss)))
+        # ==========================
+
+        # Unpack the gradients and losses
+        '''
+        gradients = [result.gradient for result in results]
+        loss = torch.mean(torch.tensor([result.loss for result in results],dtype=torch.float32))
+        '''
+        #loss = results[1].loss
+        en0 = time.time()
+        writer.add_scalar('training loss',loss,epoch)
 
         en1 = time.time()
         print("=======================================")
-        f.write('epoch {}: loss={}\n'.format(epoch, loss.data))
-       #print('epoch {}: loss={}\n  ans = {}\n goal = {}\n'.format(epoch, loss.data, ans.data, goal.data))
-        print('epoch {}: loss={}\n'.format(epoch, loss.data))
-        
-        losses.append(loss.data)
-
-        print('forward time = {}'.format(en0-st))
+        print('epoch {}: loss={}\n'.format(epoch, loss))
+        print('forward tim = {}'.format(en0-st))
         print('backward time = {}'.format(en1-en0))
-        
-        
+
+
         if epoch % 5 == 0:
             torch.save(net.state_dict(), torch_model_path)
-        
-        #if loss<1e-3:
-        #    break
-        # dgrad, stgrad, begrad = torch.autograd.grad(loss, [density, stretch, bend])
-       
-        for param in net.parameters():
-            param.grad.data.clamp_(-0.5, 0.5)
         optimizer.step()
-        scheduler.step()
-
-        print(optimizer.param_groups[0]['lr'])
-        		
-        if epoch >= 200:
+        scheduler.step(epoch)
+        
+        if epoch >= epochs:
             break
-        
-        if epoch % 50 == 0:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
-        
-        epoch = epoch + 1
+        epoch += 1
+        losses.append(loss)
 
+def runner_task(sim):# This is loop
+	epoch = 0
+	net = Net(49,12)
+	while True:
+		sync_params(net)
+		net = net.to(device)
+		reset_sim(sim,epoch,rank)
+		loss = run_sim(steps,sim,net)
+		loss.backward()
+		net = net.cpu()
 
-with open(out_path+'/log.txt','w',buffering=1) as f:
-    sim=arcsim.get_sim()
-    # reset_sim(sim)
-    
-   #param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
-    net = Net(49, 12)
-   #net = CNNet(12)
+		# ==== Share the gradient ====
+		#pack  = ServerPack(gradient=grads,loss = loss)
+		#_ = comm.gather(pack,root = 0)
+		mpi_avg_grads(net)
+		# ============================
+
+		# ==== Average the loss ====
+		loss = mpi_avg(float(loss))
+		# ==========================
+
+		for param in net.parameters():
+			param.grad.data.zero_()
+		losses.append(loss)
+		if epoch >= epochs:
+			break
+		epoch += 1
+
+if rank != 0:
+    sim = arcsim.get_sim()
+    reset_sim(sim,rank=rank)
+    runner_task(sim)
+else:
+    net = Net(49,12).cpu()
+    optimizer = torch.optim.SGD(net.parameters(),lr=0.01,momentum=0.99)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,50,2,eta_min=0.0001)
+    sim = arcsim.get_sim()
+    reset_sim(sim,rank=rank)
+    server_task(optimizer,scheduler,net,sim)
     net = net.to(device)
-    if os.path.exists(torch_model_path):
-        net.load_state_dict(torch.load(torch_model_path))
-        print("load: %s\n success" % torch_model_path)
-    
-    lr = 0.01
-    momentum = 0.9
-    f.write('lr={} momentum={}\n'.format(lr,momentum))
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0, last_epoch=-1)
-   #optimizer = torch.optim.Adam(net.parameters(),lr=lr)
-   #optimizer = torch.optim.Adadelta([density, stretch, bend])
-    do_train(optimizer,scheduler,sim,net)
-    losses = np.array(losses,dtype=np.float32)
-    np.save(out_path+'/'+'_loss',losses)
-    visualize_loss(losses,out_path)
-print("done")
+    with torch.no_grad():
+        run_sim(steps*2,sim,net)
+    torch.save(net.state_dict(),default_path+'/net')
+losses = np.array(losses,dtype=np.float32)
+np.save(default_path+'/'+str(rank)+'_loss',losses)
+visualize_loss(losses,default_path,rank)
+print("Done!:",rank)
+exit(0)
+
 
