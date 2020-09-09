@@ -13,15 +13,15 @@ import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-handles = [10, 51, 41, 57]
-ref_points = [25, 60, 30, 54]
+#handles = [10, 51, 41, 57]
+#ref_points = [25, 60, 30, 54]
 center = 62
 
 losses = []
 
 print(sys.argv)
 if len(sys.argv)==1:
-	out_path = 'rotate_out/exp3'
+	out_path = 'rotate_out/exp11'
 else:
 	out_path = sys.argv[1]
 if not os.path.exists(out_path):
@@ -29,7 +29,7 @@ if not os.path.exists(out_path):
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
-torch_model_path = out_path + ('/net_weight.pth2020-08-17_23:27:44')
+torch_model_path = out_path + ('/net_weight.pth2020-08-20_12:05:52')
 
 if torch.cuda.is_available():
     dev = "cuda:1"
@@ -70,7 +70,7 @@ spf = config['frame_steps']
 scalev=1
 
 def reset_sim(sim):
-    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay4',False)
+    arcsim.init_physics(out_path+'/conf.json', out_path+'/replay',False)
 
 def run_sim(steps, sim, net):
 
@@ -78,23 +78,32 @@ def run_sim(steps, sim, net):
         print(step)
        #remain_time = torch.tensor([(steps - step)/steps],dtype=torch.float64).to(device)
         		
-        net_input = []
-        for i in range(len(ref_points)):
-            net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
-            net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].v)
-        for i in range(len(handles)):
-            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
-            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
-        net_output = net(torch.cat(net_input).to(device))
+        r_steps = 15
+        r_step = step % 15
         
-        if step<50:
+        if step%60<15:
             r_handles = [10, 51, 41, 57]
-        elif steps<100:
-            r_handles = [57, 51, 10, 41]
-        elif steps<150:
-            r_handles = [41, 57, 51, 10]
+            r_ref_points = [25, 60, 30, 54]
+        elif step%60>=15 and step%60<30:
+            r_handles = [51, 57, 10, 41]
+            r_ref_points = [30, 25, 54, 60]
+        elif step%60>=30 and step%60<45:
+            r_handles = [57, 41, 51, 10]
+            r_ref_points = [54, 30, 60, 25]
         else:
-            r_handles = [10, 41, 57, 51]
+            r_handles = [41, 10, 57, 51]
+            r_ref_points = [60, 54, 25, 30]
+
+
+        net_input = []
+        for i in range(len(r_ref_points)):
+            net_input.append(sim.cloths[0].mesh.nodes[r_ref_points[i]].x)
+            net_input.append(sim.cloths[0].mesh.nodes[r_ref_points[i]].v)
+        for i in range(len(r_handles)):
+            net_input.append(sim.cloths[0].mesh.nodes[r_handles[i]].x)
+            net_input.append(sim.cloths[0].mesh.nodes[r_handles[i]].v)
+        net_input.append(torch.tensor(r_step/r_steps, dtype=torch.float64).view(1))
+        net_output = net(torch.cat(net_input).to(device))
 
         for i in range(len(r_handles)):
             sim_input = net_output[3*i:3*i+3]
@@ -104,12 +113,12 @@ def run_sim(steps, sim, net):
 
         arcsim.sim_step()
 
-with open(out_path+'/log.txt','w',buffering=1) as f:
+with open(out_path+'/log.txt','r',buffering=1) as f:
     sim=arcsim.get_sim()
     # reset_sim(sim)
     
     #param_g = torch.tensor([0,0,0,0,0,1],dtype=torch.float64, requires_grad=True)
-    net = Net(48, 12)
+    net = Net(49, 12)
     net = net.to(device)
     if os.path.exists(torch_model_path):
         net.load_state_dict(torch.load(torch_model_path, map_location=torch.device('cpu')))
@@ -119,6 +128,6 @@ with open(out_path+'/log.txt','w',buffering=1) as f:
         quit()
 
     reset_sim(sim)
-    run_sim(100,sim,net)
+    run_sim(300,sim,net)
 print("done")
 
