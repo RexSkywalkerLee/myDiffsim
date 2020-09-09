@@ -149,12 +149,12 @@ def run_sim(steps, sim, net):
         for i in range(len(ref_points)):
             net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
             net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].v)
-        net_input.append(sim.obstacles[0].curr_state_mesh.dummy_node.x)
-        net_input.append(sim.obstacles[0].curr_state_mesh.dummy_node.v)
+        net_input.append(sim.cloths[0].mesh.nodes[center].x)
+        net_input.append(sim.cloths[0].mesh.nodes[center].v)
         net_input.append(torch.tensor(step/steps, dtype=torch.float64).view(1))
         net_output = net(torch.cat(net_input).to(device))
 
-        sim.obstacles[0].curr_state_mesh.dummy_node.v += net_output.cpu()
+        sim.cloths[0].mesh.nodes[center].v += net_output.cpu()
 
         arcsim.sim_step()
 
@@ -221,7 +221,7 @@ def server_task(optimizer,scheduler,net,sim): # This is a loop
 
 def runner_task(sim):# This is loop
 	epoch = 0
-	net = Net(37,6)
+	net = Net(31,3)
 	while True:
 		sync_params(net)
 		net = net.to(device)
@@ -252,7 +252,7 @@ if rank != 0:
     reset_sim(sim,rank=rank)
     runner_task(sim)
 else:
-    net = Net(37,6).cpu()
+    net = Net(31,3).cpu()
     optimizer = torch.optim.SGD(net.parameters(),lr=0.01,momentum=0.99)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,50,2,eta_min=0.0001)
     sim = arcsim.get_sim()
