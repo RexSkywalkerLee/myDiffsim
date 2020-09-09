@@ -10,14 +10,14 @@ try:
 except:
     print("Usage: python3 exp_parallel_runner.py <cudas>")
     exit(-1)
-path = 'algo_out/'+time.ctime()
+path = 'rotor_out/'+time.ctime()
 os.mkdir(path)
 #conf = json.load(open('conf.json'))
 #task = conf['experiment']['task']
 #proc = conf['training']['process']
 #subpath = path+'/{0}_{1}_{2}_{3}_{4}_{5}'.format(lr,m,betas,op,sc,proc) 
 #os.mkdir(subpath)
-command = 'mpiexec -n {0} python3 rotate_cloth.py {1} \'{2}/\''.format(procs,cudas,path)
+command = 'mpiexec -n {0} python3 mpi_rotor.py {1} \'{2}/\''.format(procs,cudas,path)
 ret = os.system(command)
 if ret != 0:
     exit()
