@@ -23,7 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 rank = proc_id() # Defnine rank 0 as server and rest are  runner
 size = num_procs()
 
-handles = [10, 51, 41, 57]
+handles = [10, 41, 51, 57]
 ref_points = [25, 60, 30, 54]
 center = 62
 
@@ -44,7 +44,8 @@ except:
 print("cuda device:",cuda)
 
 steps = 20
-epochs = 100
+epochs = 50
+learning_rate = 0.001
 
 if os.path.exists(default_path+str(rank)):
     pass
@@ -67,9 +68,9 @@ torch_model_path = out_path + ('/net_weight.pth%s'%timestamp)
 class Net(nn.Module):
     def __init__(self, n_input, n_output):
         super(Net, self).__init__()
-        log_std = -0.5 * np.ones(n_output, dtype=np.float64)
+        log_std = -2 * np.ones(n_output, dtype=np.float64)
         log_std = torch.nn.Parameter(torch.as_tensor(log_std))
-        self.std = torch.exp(log_std).double()
+        self.std = torch.exp(log_std).double().to(device)
         self.fc1 = nn.Linear(n_input, 64).double()
         self.fc2 = nn.Linear(64, 64).double()
         self.fc3 = nn.Linear(64, n_output).double()
@@ -79,7 +80,7 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.dropout(x)
         x = self.fc3(x)
-        a = Normal(x, self.std.to(device)).sample()
+        x = x + torch.normal(0, self.std)
         return x
 
 with open('conf/rigidcloth/rotor/rotor.json','r') as f:
@@ -119,28 +120,36 @@ def visualize_loss(losses, dir_name, rank):
     plt.ylabel('losses')
     plt.savefig(dir_name+'/'+'loss'+str(rank)+'.jpg')
 
-def get_rotation_loss(ans):
-    loss = torch.norm(ans[-1,:] - torch.tensor([0.500000, 0.502674, -0.000000], dtype=torch.float64).to(device))
-    cnt = 0
+def get_rotation_loss(sim):
+    loss = 0
     for i in ref_points:
-        loss = loss + torch.norm(ans[cnt,:] - goal[i,:])
-        cnt += 1
+        loss -= torch.norm(sim.cloths[0].mesh.nodes[i].v[:2].clone(), p=2)
     for i in handles:
-        loss = loss + torch.norm(ans[cnt,:] - goal[i,:])
-        cnt += 1
-   # loss = loss + torch.norm(ans[:,-1]) 
+        loss -= torch.norm(sim.cloths[0].mesh.nodes[i].v[:2].clone(), p=2)
+        
+    loss += 8 * torch.norm(sim.cloths[0].mesh.nodes[center].x.clone() - torch.tensor([0.500000,0.502674,-0.000000]), p=2)
+    loss += 8 * torch.norm(sim.cloths[0].mesh.nodes[center].v.clone(), p=2)
     loss = loss.to(device)
     return loss
-
 
 def get_reference_loss(ans, goal):
     diff = ans - goal
     loss = torch.norm(diff)
     loss = loss.to(device)
-    return loss	
-
+    return loss
 
 def run_sim(steps, sim, net):
+    cum_loss = 0
+    average_weight = [1/steps] * steps
+    linear_weight = [step/(steps*(steps-1)/2) for step in range(steps)]
+    
+    exponential_weight = [np.exp(step) for step in range(steps)]
+    exponential_weight = [i/np.sum(exponential_weight) for i in exponential_weight]
+    exponential_weight = [i * (i > 1e-3) for i in exponential_weight]
+    
+    np.random.seed(0)
+    stochastic_weight = np.random.rand(steps).tolist()
+    stochastic_weight = [i/np.sum(stochastic_weight) for i in stochastic_weight]
 
     for step in range(steps):
         print(rank,':',step)
@@ -149,28 +158,29 @@ def run_sim(steps, sim, net):
         for i in range(len(ref_points)):
             net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].x)
             net_input.append(sim.cloths[0].mesh.nodes[ref_points[i]].v)
-        net_input.append(sim.obstacles[0].curr_state_mesh.dummy_node.x)
-        net_input.append(sim.obstacles[0].curr_state_mesh.dummy_node.v)
-        net_input.append(torch.tensor(step/steps, dtype=torch.float64).view(1))
+        for i in range(len(handles)):
+            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].x)
+            net_input.append(sim.cloths[0].mesh.nodes[handles[i]].v)
+        net_input.append(sim.cloths[0].mesh.nodes[center].x)
+        net_input.append(sim.cloths[0].mesh.nodes[center].v)
         net_output = net(torch.cat(net_input).to(device))
 
-        sim.obstacles[0].curr_state_mesh.dummy_node.v += net_output.cpu()
+        for i in range(len(handles)):
+            sim_input = net_output[3*i:3*i+3]
+            sim_input = torch.clamp(sim_input, -1e5, 1e5)
+            sim_input = sim_input.cpu()
+            sim.cloths[0].mesh.nodes[handles[i]].v += sim_input
 
         arcsim.sim_step()
+        
+        cum_loss = cum_loss + get_rotation_loss(sim) * stochastic_weight[step]
 
-    ans = [ node.x.to(device) for node in sim.cloths[0].mesh.nodes ]
-    ans = torch.stack(ans)
-    ans = ans.to(device)
-
-    loss = get_reference_loss(ans, goal)
-
-    return loss.to(device)
+    return cum_loss.to(device)
 
 def server_task(optimizer,scheduler,net,sim): # This is a loop
     epoch = 0
     global steps, epochs
     while True:
-        st = time.time()
         optimizer.zero_grad()
         # ==== Synchronize Parameters ====
         sync_params(net)
@@ -180,8 +190,11 @@ def server_task(optimizer,scheduler,net,sim): # This is a loop
         net = net.to(device)
         #print(next(net.parameters()).grad)
         reset_sim(sim,epoch,rank)
+        st = time.time()
         loss = run_sim(steps,sim,net)
-        loss.backward()
+        en0 = time.time()
+        loss.backward(retain_graph=True)
+        en1 = time.time()
         net = net.cpu()
         # ====================================
 
@@ -190,7 +203,7 @@ def server_task(optimizer,scheduler,net,sim): # This is a loop
         # ==================================
         
         # ==== Average the loss ====
-        loss = float(mpi_avg(float(loss)))
+        avg_loss = float(mpi_avg(float(loss)))
         # ==========================
 
         # Unpack the gradients and losses
@@ -199,13 +212,11 @@ def server_task(optimizer,scheduler,net,sim): # This is a loop
         loss = torch.mean(torch.tensor([result.loss for result in results],dtype=torch.float32))
         '''
         #loss = results[1].loss
-        en0 = time.time()
-        writer.add_scalar('training loss',loss,epoch)
+        writer.add_scalar('training average loss',avg_loss,epoch)
 
-        en1 = time.time()
         print("=======================================")
-        print('epoch {}: loss={}\n'.format(epoch, loss))
-        print('forward tim = {}'.format(en0-st))
+        print('epoch {}: loss={}\n'.format(epoch, avg_loss))
+        print('forward time = {}'.format(en0-st))
         print('backward time = {}'.format(en1-en0))
 
 
@@ -217,44 +228,44 @@ def server_task(optimizer,scheduler,net,sim): # This is a loop
         if epoch >= epochs:
             break
         epoch += 1
-        losses.append(loss)
+        losses.append(avg_loss)
 
 def runner_task(sim):# This is loop
-	epoch = 0
-	net = Net(37,6)
-	while True:
-		sync_params(net)
-		net = net.to(device)
-		reset_sim(sim,epoch,rank)
-		loss = run_sim(steps,sim,net)
-		loss.backward()
-		net = net.cpu()
+    epoch = 0
+    net = Net(54,12)
+    while True:
+        sync_params(net)
+        net = net.to(device)
+        reset_sim(sim,epoch,rank)
+        loss = run_sim(steps,sim,net)
+        loss.backward(retain_graph=True)
+        net = net.cpu()
 
-		# ==== Share the gradient ====
-		#pack  = ServerPack(gradient=grads,loss = loss)
-		#_ = comm.gather(pack,root = 0)
-		mpi_avg_grads(net)
-		# ============================
+        # ==== Share the gradient ====
+        #pack  = ServerPack(gradient=grads,loss = loss)
+        #_ = comm.gather(pack,root = 0)
+        mpi_avg_grads(net)
+        # ============================
 
-		# ==== Average the loss ====
-		loss = mpi_avg(float(loss))
-		# ==========================
+        # ==== Average the loss ====
+        avg_loss = mpi_avg(float(loss))
+        # ==========================
 
-		for param in net.parameters():
-			param.grad.data.zero_()
-		losses.append(loss)
-		if epoch >= epochs:
-			break
-		epoch += 1
+        for param in net.parameters():
+            param.grad.data.zero_()
+        losses.append(loss)
+        if epoch >= epochs:
+            break
+        epoch += 1
 
 if rank != 0:
     sim = arcsim.get_sim()
     reset_sim(sim,rank=rank)
     runner_task(sim)
 else:
-    net = Net(37,6).cpu()
-    optimizer = torch.optim.SGD(net.parameters(),lr=0.01,momentum=0.99)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,50,2,eta_min=0.0001)
+    net = Net(54,12).cpu()
+    optimizer = torch.optim.SGD(net.parameters(),lr=learning_rate,momentum=0.99)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,10,1,eta_min=learning_rate/10)
     sim = arcsim.get_sim()
     reset_sim(sim,rank=rank)
     server_task(optimizer,scheduler,net,sim)
